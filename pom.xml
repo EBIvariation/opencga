@@ -6,7 +6,7 @@
 
     <groupId>uk.ac.ebi.eva</groupId>
     <artifactId>opencga</artifactId>
-    <version>0.5.3</version>
+    <version>0.5.4</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -21,7 +21,7 @@
 
     <properties>
         <java.version>1.8</java.version>
-        <biodata.version>0.4.6</biodata.version>
+        <biodata.version>0.4.7</biodata.version>
         <datastore.version>0.3.3</datastore.version>
         <cellbase.version>3.1.0</cellbase.version>
     </properties>
@@ -81,12 +81,18 @@
 
     <repositories>
         <repository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>daily</updatePolicy>
-            </snapshots>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+          <id>eva-releases</id>
+          <url>https://oss.jfrog.org/artifactory/libs-release</url>
+        </repository>
+        <repository>
+          <snapshots>
+            <enabled>true</enabled>
+          </snapshots>
+          <id>eva-snapshots</id>
+          <url>https://oss.jfrog.org/artifactory/libs-snapshot</url>
         </repository>
     </repositories>
 
@@ -380,4 +386,14 @@
             </build>
         </profile>
     </profiles>
+    <distributionManagement>
+        <snapshotRepository>
+            <id>eva-snapshots</id>
+            <url>https://oss.jfrog.org/artifactory/oss-snapshot-local</url>
+        </snapshotRepository>
+        <repository>
+            <id>eva-releases</id>
+            <url>https://oss.jfrog.org/artifactory/oss-release-local</url>
+        </repository>
+    </distributionManagement>
 </project>
