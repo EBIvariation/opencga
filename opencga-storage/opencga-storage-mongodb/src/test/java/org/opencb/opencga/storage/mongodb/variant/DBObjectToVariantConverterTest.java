@@ -220,4 +220,15 @@ public class DBObjectToVariantConverterTest {
         assertEquals("1_1000_TAG_" + new String(CryptoUtils.encryptSha1(alt)), converter.buildStorageId(v3));
     }
 
+
+    @Test
+    public void testConvertVariantWithCoordinatesStoredInLongObjectToDataModelType() {
+        mongoVariant.append(DBObjectToVariantConverter.START_FIELD, new Long(variant.getStart()))
+                .append(DBObjectToVariantConverter.END_FIELD, new Long(variant.getStart()));
+
+        DBObjectToVariantConverter converter = new DBObjectToVariantConverter();
+        Variant converted = converter.convertToDataModelType(mongoVariant);
+        assertEquals(variant, converted);
+    }
+
 }
