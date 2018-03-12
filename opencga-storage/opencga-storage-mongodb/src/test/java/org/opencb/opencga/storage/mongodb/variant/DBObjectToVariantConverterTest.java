@@ -1,6 +1,5 @@
 package org.opencb.opencga.storage.mongodb.variant;
 
-import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.mongodb.BasicDBList;
 import com.mongodb.BasicDBObject;
@@ -9,7 +8,9 @@ import com.mongodb.DBObject;
 import java.util.*;
 
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.opencb.biodata.models.variant.VariantSourceEntry;
 import org.opencb.biodata.models.variant.Variant;
 import org.opencb.commons.utils.CryptoUtils;
@@ -26,6 +27,9 @@ public class DBObjectToVariantConverterTest {
     private BasicDBObject mongoVariant;
     private Variant variant;
     protected VariantSourceEntry variantSourceEntry;
+
+    @Rule
+    public ExpectedException thrown = ExpectedException.none();
 
     @Before
     public void setUp() {
@@ -231,4 +235,13 @@ public class DBObjectToVariantConverterTest {
         assertEquals(variant, converted);
     }
 
+    @Test
+    public void testConvertVariantWithCoordinatesNotFittingInIntToDataModelTypeWillThrowException() {
+        mongoVariant.append(DBObjectToVariantConverter.START_FIELD, 12345678901L)
+                    .append(DBObjectToVariantConverter.END_FIELD, 12345678901L);
+
+        DBObjectToVariantConverter converter = new DBObjectToVariantConverter();
+        thrown.expect(ArithmeticException.class);
+        converter.convertToDataModelType(mongoVariant);
+    }
 }

@@ -97,8 +97,8 @@ public class DBObjectToVariantConverter implements ComplexTypeConverter<Variant,
     @Override
     public Variant convertToDataModelType(DBObject object) {
         String chromosome = (String) object.get(CHROMOSOME_FIELD);
-        int start = (int) object.get(START_FIELD);
-        int end = (int) object.get(END_FIELD);
+        int start = getDbObjectNumericFieldAsInt(object.get(START_FIELD));
+        int end = getDbObjectNumericFieldAsInt(object.get(END_FIELD));
         String reference = (String) object.get(REFERENCE_FIELD);
         String alternate = (String) object.get(ALTERNATE_FIELD);
         Variant variant = new Variant(chromosome, start, end, reference, alternate);
@@ -146,6 +146,14 @@ public class DBObjectToVariantConverter implements ComplexTypeConverter<Variant,
             statsConverter.convertCohortsToDataModelType(stats, variant);
         }
         return variant;
+    }
+
+    private int getDbObjectNumericFieldAsInt(Object field) {
+        if (field instanceof Integer) {
+            return (int)field;
+        } else {
+            return Math.toIntExact((long)field);
+        }
     }
 
     @Override
