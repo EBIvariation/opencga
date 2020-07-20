@@ -4,9 +4,11 @@ import com.mongodb.AggregationOutput;
 import com.mongodb.BasicDBObject;
 import com.mongodb.BasicDBObjectBuilder;
 import com.mongodb.DBObject;
+import com.mongodb.client.AggregateIterable;
 import net.sf.samtools.SAMFileReader;
 import net.sf.samtools.SAMRecord;
 import net.sf.samtools.SAMRecordIterator;
+import org.bson.Document;
 import org.opencb.biodata.formats.alignment.AlignmentConverter;
 import org.opencb.biodata.formats.sequence.fasta.dbadaptor.CellBaseSequenceDBAdaptor;
 import org.opencb.biodata.formats.sequence.fasta.dbadaptor.SequenceDBAdaptor;
@@ -186,10 +188,10 @@ public class IndexedAlignmentDBAdaptor implements AlignmentDBAdaptor {
             size -= size%chunkSize;
         }
 
-        List<DBObject> operations = new LinkedList<>();
-        operations.add(new BasicDBObject(
+        List<Document> operations = new LinkedList<>();
+        operations.add(new Document(
                 "$match",
-                new BasicDBObject(
+                new Document(
                         "$and",
                         Arrays.asList(
                                 new BasicDBObject(CoverageMongoDBWriter.START_FIELD, new BasicDBObject("$gt", region.getStart())),
@@ -199,17 +201,17 @@ public class IndexedAlignmentDBAdaptor implements AlignmentDBAdaptor {
                         )
                 )
         ));
-        operations.add(new BasicDBObject(
+        operations.add(new Document(
                 "$unwind",
                 "$" + CoverageMongoDBWriter.FILES_FIELD
         ));
-        operations.add(new BasicDBObject(
+        operations.add(new Document(
                 "$match",
-                new BasicDBObject(CoverageMongoDBWriter.FILES_FIELD + "." + CoverageMongoDBWriter.FILE_ID_FIELD, fileId)
+                new Document(CoverageMongoDBWriter.FILES_FIELD + "." + CoverageMongoDBWriter.FILE_ID_FIELD, fileId)
         ));
         String startField = "$" + CoverageMongoDBWriter.START_FIELD;
         String averageField = "$" + CoverageMongoDBWriter.FILES_FIELD + "." + CoverageMongoDBWriter.AVERAGE_FIELD;
-        operations.add(new BasicDBObject(
+        operations.add(new Document(
                 "$group", BasicDBObjectBuilder.start(
                 "_id", new BasicDBObject(
                         "$divide", Arrays.asList(
@@ -239,12 +241,12 @@ public class IndexedAlignmentDBAdaptor implements AlignmentDBAdaptor {
                         )
                 ).get()
         ));
-        operations.add(new BasicDBObject(
+        operations.add(new Document(
                 "$sort",
-                new BasicDBObject("_id", 1)
+                new Document("_id", 1)
         ));
         StringBuilder mongoAggregate = new StringBuilder("db.").append(CoverageMongoDBWriter.COVERAGE_COLLECTION_NAME + ".aggregate( [");
-        for (DBObject operation : operations) {
+        for (Document operation : operations) {
             mongoAggregate.append(operation.toString()).append(" , ");
         }
         mongoAggregate.append("])");
@@ -260,11 +262,12 @@ public class IndexedAlignmentDBAdaptor implements AlignmentDBAdaptor {
 
     /*************/     //TODO: What's going on?
         long startTime = System.currentTimeMillis();
-        AggregationOutput aggregationOutput = mongoDataStore.getDb().getCollection(CoverageMongoDBWriter.COVERAGE_COLLECTION_NAME).aggregate(operations);
+        AggregateIterable<Document> aggregationOutput = mongoDataStore.getDb().getCollection(
+                CoverageMongoDBWriter.COVERAGE_COLLECTION_NAME).aggregate(operations);
 
         List<DBObject> results = new LinkedList<>();
-        for (DBObject object : aggregationOutput.results()) {
-            results.add(object);
+        for (Document document : aggregationOutput) {
+            results.add(new BasicDBObject(document));
         }
 
         long endTime = System.currentTimeMillis();
@@ -352,7 +355,7 @@ public class IndexedAlignmentDBAdaptor implements AlignmentDBAdaptor {
 
 
         //db.alignment.find( { _id:{$in:regions}}, { files: {$elemMatch : {id:fileId} }, "files.cov":0 , "files.id":0 } )}
-        DBObject query = new BasicDBObject(CoverageMongoDBWriter.ID_FIELD, new BasicDBObject("$in", regions));
+        Document query = new Document(CoverageMongoDBWriter.ID_FIELD, new Document("$in", regions));
         DBObject projection = BasicDBObjectBuilder
                 .start()
 //                .append(CoverageMongoWriter.FILES_FIELD+"."+CoverageMongoWriter.FILE_ID_FIELD,fileId)
@@ -366,7 +369,7 @@ public class IndexedAlignmentDBAdaptor implements AlignmentDBAdaptor {
 
         System.out.println("db."+ CoverageMongoDBWriter.COVERAGE_COLLECTION_NAME+".find("+query.toString()+", "+projection.toString()+")");
 
-        QueryResult queryResult = collection.find(query, projection, complexTypeConverter, null);
+        QueryResult queryResult = collection.find(query, new Document(projection.toMap()), complexTypeConverter, null);
         queryResult.setId(region.toString());
         queryResult.setTime((int) (System.currentTimeMillis() - startTime));
         return queryResult;

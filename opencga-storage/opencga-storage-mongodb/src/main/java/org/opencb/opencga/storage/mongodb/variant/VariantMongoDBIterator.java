@@ -1,7 +1,7 @@
 package org.opencb.opencga.storage.mongodb.variant;
 
-import com.mongodb.DBCursor;
-import com.mongodb.DBObject;
+import com.mongodb.client.FindIterable;
+import org.bson.Document;
 import org.opencb.biodata.models.variant.Variant;
 import org.opencb.opencga.storage.core.variant.adaptors.VariantDBIterator;
 
@@ -10,16 +10,16 @@ import org.opencb.opencga.storage.core.variant.adaptors.VariantDBIterator;
  */
 public class VariantMongoDBIterator extends VariantDBIterator {
 
-    private DBCursor dbCursor;
-    private DBObjectToVariantConverter dbObjectToVariantConverter;
+    private FindIterable<Document> dbCursor;
+    private DocumentToVariantConverter documentToVariantConverter;
 
-    VariantMongoDBIterator(DBCursor dbCursor, DBObjectToVariantConverter dbObjectToVariantConverter) { //Package protected
-        this(dbCursor, dbObjectToVariantConverter, 100);
+    VariantMongoDBIterator(FindIterable<Document> dbCursor, DocumentToVariantConverter documentToVariantConverter) { //Package protected
+        this(dbCursor, documentToVariantConverter, 100);
     }
 
-    VariantMongoDBIterator(DBCursor dbCursor, DBObjectToVariantConverter dbObjectToVariantConverter, int batchSize) { //Package protected
+    VariantMongoDBIterator(FindIterable<Document> dbCursor, DocumentToVariantConverter documentToVariantConverter, int batchSize) { //Package protected
         this.dbCursor = dbCursor;
-        this.dbObjectToVariantConverter = dbObjectToVariantConverter;
+        this.documentToVariantConverter = documentToVariantConverter;
         if(batchSize > 0) {
             dbCursor.batchSize(batchSize);
         }
@@ -27,13 +27,13 @@ public class VariantMongoDBIterator extends VariantDBIterator {
 
     @Override
     public boolean hasNext() {
-        return dbCursor.hasNext();
+        return dbCursor.iterator().hasNext();
     }
 
     @Override
     public Variant next() {
-        DBObject dbObject = dbCursor.next();
-        return dbObjectToVariantConverter.convertToDataModelType(dbObject);
+        Document document = dbCursor.iterator().next();
+        return documentToVariantConverter.convertToDataModelType(document);
     }
 
     @Override

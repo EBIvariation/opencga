@@ -630,7 +630,7 @@ public class CatalogManagerTest extends GenericTest {
     private static void clearCatalog(Properties properties) throws IOException {
         MongoDataStoreManager mongoManager = new MongoDataStoreManager(properties.getProperty("OPENCGA.CATALOG.DB.HOST"), Integer.parseInt(properties.getProperty("OPENCGA.CATALOG.DB.PORT")));
         MongoDataStore db = mongoManager.get(properties.getProperty("OPENCGA.CATALOG.DB.DATABASE"));
-        db.getDb().dropDatabase();
+        db.getDb().drop();
 
         Path rootdir = Paths.get(URI.create(properties.getProperty("OPENCGA.CATALOG.MAIN.ROOTDIR")));
 //        Path rootdir = Paths.get(URI.create(properties.getProperty("CATALOG.MAIN.ROOTDIR")));

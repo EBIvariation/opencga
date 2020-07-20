@@ -1,6 +1,6 @@
 package org.opencb.opencga.catalog.db;
 
-import com.mongodb.WriteResult;
+import com.mongodb.client.result.UpdateResult;
 import org.opencb.datastore.core.ObjectMap;
 import org.opencb.datastore.core.QueryOptions;
 import org.opencb.datastore.core.QueryResult;
@@ -68,7 +68,7 @@ public abstract class CatalogDBAdaptor {
 
     public abstract QueryResult<User> insertUser(User user, QueryOptions options) throws CatalogDBException;
 
-    public abstract QueryResult<Integer> deleteUser(String userId) throws CatalogDBException;
+    public abstract QueryResult<Long> deleteUser(String userId) throws CatalogDBException;
 
     public abstract QueryResult<ObjectMap> login(String userId, String password, Session session) throws CatalogDBException;
 
@@ -107,7 +107,7 @@ public abstract class CatalogDBAdaptor {
 
     public abstract QueryResult<Project> getProject(int project, QueryOptions options) throws CatalogDBException;
 
-    public abstract QueryResult<Integer> deleteProject(int projectId) throws CatalogDBException;
+    public abstract QueryResult<Long> deleteProject(int projectId) throws CatalogDBException;
 
     public abstract QueryResult renameProjectAlias(int projectId, String newProjectName) throws CatalogDBException;
 
@@ -142,7 +142,7 @@ public abstract class CatalogDBAdaptor {
 
     public abstract QueryResult<ObjectMap> modifyStudy(int studyId, ObjectMap params) throws CatalogDBException;
 
-    public abstract QueryResult<Integer> deleteStudy(int studyId) throws CatalogDBException;
+    public abstract QueryResult<Long> deleteStudy(int studyId) throws CatalogDBException;
 
     public abstract int getStudyId(int projectId, String studyAlias) throws CatalogDBException;
 
@@ -163,7 +163,7 @@ public abstract class CatalogDBAdaptor {
     // add file to study
     public abstract QueryResult<File> createFileToStudy(int studyId, File file, QueryOptions options) throws CatalogDBException;
 
-    public abstract QueryResult<Integer> deleteFile(int fileId) throws CatalogDBException;
+    public abstract QueryResult<Long> deleteFile(int fileId) throws CatalogDBException;
 
     public abstract int getFileId(int studyId, String path) throws CatalogDBException;
 
@@ -178,7 +178,7 @@ public abstract class CatalogDBAdaptor {
 
     public abstract QueryResult modifyFile(int fileId, ObjectMap parameters) throws CatalogDBException;
 
-    public abstract QueryResult<WriteResult> renameFile(int fileId, String name) throws CatalogDBException;
+    public abstract QueryResult<UpdateResult> renameFile(int fileId, String name) throws CatalogDBException;
 
     public abstract int getStudyIdByFileId(int fileId) throws CatalogDBException;
 
@@ -223,7 +223,7 @@ public abstract class CatalogDBAdaptor {
 
     public abstract QueryResult<Job> createJob(int studyId, Job job, QueryOptions options) throws CatalogDBException;
 
-    public abstract QueryResult<Integer> deleteJob(int jobId) throws CatalogDBException;
+    public abstract QueryResult<Long> deleteJob(int jobId) throws CatalogDBException;
 
     public abstract QueryResult<Job> getJob(int jobId, QueryOptions options) throws CatalogDBException;
 
@@ -276,7 +276,7 @@ public abstract class CatalogDBAdaptor {
 
     public abstract QueryResult<Sample> modifySample(int sampleId, QueryOptions parameters) throws CatalogDBException;
 
-    public abstract QueryResult<Integer> deleteSample(int sampleId) throws CatalogDBException;
+    public abstract QueryResult<Long> deleteSample(int sampleId) throws CatalogDBException;
 
     public abstract int getStudyIdBySampleId(int sampleId) throws CatalogDBException;
 

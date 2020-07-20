@@ -4,10 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.mongodb.BasicDBObject;
 import com.mongodb.BasicDBObjectBuilder;
 import com.mongodb.DBObject;
-import com.mongodb.MongoCredential;
 import org.junit.*;
 import org.junit.rules.ExpectedException;
-import org.junit.rules.Timeout;
 import org.junit.runners.MethodSorters;
 import org.opencb.commons.test.GenericTest;
 import org.opencb.datastore.core.ObjectMap;
@@ -70,7 +68,7 @@ public class CatalogMongoDBAdaptorTest extends GenericTest {
 //        clearDB(dataStoreServerAddress, mongoCredentials);
         MongoDataStoreManager mongoManager = new MongoDataStoreManager(dataStoreServerAddress.getHost(), dataStoreServerAddress.getPort());
         MongoDataStore db = mongoManager.get(database);
-        db.getDb().dropDatabase();
+        db.getDb().drop();
 
         catalogDBAdaptor = new CatalogMongoDBAdaptor(Arrays.asList(dataStoreServerAddress), mongoDBConfiguration, database);
         initDefaultCatalogDB();
@@ -267,7 +265,7 @@ public class CatalogMongoDBAdaptorTest extends GenericTest {
         QueryResult<Project> result = catalogDBAdaptor.createProject(user1.getId(), p, null);
         System.out.println(result);
         p = result.getResult().get(0);
-        QueryResult<Integer> queryResult = catalogDBAdaptor.deleteProject(p.getId());
+        QueryResult<Long> queryResult = catalogDBAdaptor.deleteProject(p.getId());
 
         System.out.println(queryResult);
         assertTrue(queryResult.getResult().get(0) == 1);
@@ -389,7 +387,7 @@ public class CatalogMongoDBAdaptorTest extends GenericTest {
     public void deleteStudyTest() throws CatalogDBException {
         int projectId = catalogDBAdaptor.getProjectId("jcoll", "P1");
         Study study = catalogDBAdaptor.createStudy(projectId, new Study("Phase 1", "ph1", Study.Type.CASE_CONTROL, "", "", null), null).first();
-        QueryResult<Integer> queryResult = catalogDBAdaptor.deleteStudy(study.getId());
+        QueryResult<Long> queryResult = catalogDBAdaptor.deleteStudy(study.getId());
         System.out.println(queryResult);
         assertTrue(queryResult.getResult().get(0) == 1);
 
@@ -402,7 +400,7 @@ public class CatalogMongoDBAdaptorTest extends GenericTest {
         }
 
         try {
-            QueryResult<Integer> queryResult1 = catalogDBAdaptor.deleteStudy(-1);
+            QueryResult<Long> queryResult1 = catalogDBAdaptor.deleteStudy(-1);
             fail("error: Expected \"Study not found\" exception");
         } catch (CatalogDBException e) {
             System.out.println("correct exception: " + e);
@@ -628,7 +626,7 @@ public class CatalogMongoDBAdaptorTest extends GenericTest {
 
     @Test
     public void deleteFileTest() throws CatalogDBException, IOException {
-        QueryResult<Integer> delete = catalogDBAdaptor.deleteFile(catalogDBAdaptor.getFileId(catalogDBAdaptor.getStudyId(catalogDBAdaptor.getProjectId("jcoll", "1000G"), "ph1"), "/data/file.sam"));
+        QueryResult<Long> delete = catalogDBAdaptor.deleteFile(catalogDBAdaptor.getFileId(catalogDBAdaptor.getStudyId(catalogDBAdaptor.getProjectId("jcoll", "1000G"), "ph1"), "/data/file.sam"));
         System.out.println(delete);
         assertTrue(delete.getResult().get(0) == 1);
         try {
@@ -776,7 +774,7 @@ public class CatalogMongoDBAdaptorTest extends GenericTest {
         int studyId = catalogDBAdaptor.getStudyId(catalogDBAdaptor.getProjectId("jcoll", "1000G"), "ph1");
 //        int analysisId = catalogDBAdaptor.getAnalysisId(studyId, "analysis1Alias");
         int jobId = catalogDBAdaptor.getAllJobs(studyId, null).getResult().get(0).getId();
-        QueryResult<Integer> queryResult = catalogDBAdaptor.deleteJob(jobId);
+        QueryResult<Long> queryResult = catalogDBAdaptor.deleteJob(jobId);
         System.out.println(queryResult);
         assertTrue(queryResult.getResult().get(0) == 1);
         try {
