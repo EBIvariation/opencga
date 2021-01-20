@@ -82,7 +82,7 @@ public class DocumentToVariantSourceEntryConverter implements ComplexTypeConvert
             
             // Unzip the "src" field, if available
             if (((Document) document.get(ATTRIBUTES_FIELD)).containsKey("src")) {
-                byte[] o = (byte[]) ((Document) document.get(ATTRIBUTES_FIELD)).get("src");
+                byte[] o = ((Document) document.get(ATTRIBUTES_FIELD)).get("src", org.bson.types.Binary.class).getData();
                 try {
                     file.addAttribute("src", org.opencb.commons.utils.StringUtils.gunzip(o));
                 } catch (IOException ex) {

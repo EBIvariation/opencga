@@ -10,6 +10,7 @@ import org.opencb.biodata.models.variant.Variant;
 import org.opencb.biodata.models.variant.annotation.VariantAnnotation;
 import org.opencb.commons.utils.CryptoUtils;
 import org.opencb.datastore.core.ComplexTypeConverter;
+import org.opencb.opencga.storage.mongodb.utils.ArrayToBasicDBListConverter;
 
 /**
  *
@@ -109,7 +110,7 @@ public class DocumentToVariantConverter implements ComplexTypeConverter<Variant,
         }
 
         // Transform HGVS: List of map entries -> Map of lists
-        BasicDBList mongoHgvs = (BasicDBList) object.get(HGVS_FIELD);
+        BasicDBList mongoHgvs = ArrayToBasicDBListConverter.toBasicDBList(object.get(HGVS_FIELD));
         if (mongoHgvs != null) {
             for (Object o : mongoHgvs) {
                 Document dbo = (Document) o;
@@ -119,7 +120,7 @@ public class DocumentToVariantConverter implements ComplexTypeConverter<Variant,
 
         // Files
         if (variantSourceEntryConverter != null) {
-            BasicDBList mongoFiles = (BasicDBList) object.get(FILES_FIELD);
+            BasicDBList mongoFiles = ArrayToBasicDBListConverter.toBasicDBList(object.get(FILES_FIELD));
             if (mongoFiles != null) {
                 for (Object o : mongoFiles) {
                     Document dbo = (Document) o;
@@ -141,8 +142,7 @@ public class DocumentToVariantConverter implements ComplexTypeConverter<Variant,
 
         // Statistics
         if (statsConverter != null && object.containsKey(STATS_FIELD)) {
-            Document stats = (Document) object.get(STATS_FIELD);
-            statsConverter.convertCohortsToDataModelType(stats, variant);
+            statsConverter.convertCohortsToDataModelType(object.get(STATS_FIELD), variant);
         }
         return variant;
     }

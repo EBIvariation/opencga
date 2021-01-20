@@ -171,7 +171,7 @@ public class VariantSourceMongoDBAdaptor implements VariantSourceDBAdaptor {
         MongoDBCollection coll = db.getCollection(collectionName);
         Document projection = new Document(DocumentToVariantSourceConverter.FILEID_FIELD, true)
                 .append(DocumentToVariantSourceConverter.SAMPLES_FIELD, true);
-        QueryResult queryResult = coll.find((Document)null, projection, null);
+        QueryResult queryResult = coll.find(new Document(), projection, null);
         
         List<Document> result = queryResult.getResult();
         samplesInSources.clear();

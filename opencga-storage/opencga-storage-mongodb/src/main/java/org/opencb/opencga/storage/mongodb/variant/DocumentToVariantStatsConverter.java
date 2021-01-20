@@ -1,5 +1,6 @@
 package org.opencb.opencga.storage.mongodb.variant;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -81,9 +82,9 @@ public class DocumentToVariantStatsConverter implements ComplexTypeConverter<Var
      * @param cohortsStats List from mongo containing VariantStats.
      * @param variant contains allele info to fill the VariantStats, and it sourceEntries will be filled.
      */
-    public void convertCohortsToDataModelType(Document cohortsStats, Variant variant) {
-        if (cohortsStats instanceof List) {
-            List<Document> cohortStatsList = ((List) cohortsStats);
+    public void convertCohortsToDataModelType(Object cohortsStats, Variant variant) {
+        if (cohortsStats instanceof ArrayList) {
+            ArrayList<Document> cohortStatsList = ((ArrayList) cohortsStats);
             for (Document vs : cohortStatsList) {
                 VariantStats variantStats = convertToDataModelType(vs);
                 if (variant != null) {
