@@ -1,8 +1,7 @@
 package org.opencb.opencga.storage.mongodb.variant;
 
 import com.mongodb.BasicDBList;
-import com.mongodb.BasicDBObject;
-import com.mongodb.DBObject;
+import org.bson.Document;
 
 import java.util.*;
 
@@ -11,6 +10,7 @@ import org.opencb.biodata.models.variant.Variant;
 import org.opencb.biodata.models.variant.annotation.VariantAnnotation;
 import org.opencb.commons.utils.CryptoUtils;
 import org.opencb.datastore.core.ComplexTypeConverter;
+import org.opencb.opencga.storage.mongodb.utils.ArrayToBasicDBListConverter;
 
 /**
  *
@@ -19,12 +19,12 @@ import org.opencb.datastore.core.ComplexTypeConverter;
  *
  * Design policies:
  *  - IDS
- *      - The ids of a Variant will NOT be put in the DBObject. Using addToSet(ids) and
+ *      - The ids of a Variant will NOT be put in the Document. Using addToSet(ids) and
  *              setOnInsert(without ids) avoids overwriting ids.
- *      - In a DBObject, both an empty ids array or no ids property, converts to a Variant with an
+ *      - In a Document, both an empty ids array or no ids property, converts to a Variant with an
  *              empty set of ids.
  */
-public class DBObjectToVariantConverter implements ComplexTypeConverter<Variant, DBObject> {
+public class DocumentToVariantConverter implements ComplexTypeConverter<Variant, Document> {
 
     public final static String CHROMOSOME_FIELD = "chr";
     public final static String START_FIELD = "start";
@@ -67,42 +67,42 @@ public class DBObjectToVariantConverter implements ComplexTypeConverter<Variant,
         fieldsMap.put("annotation", ANNOTATION_FIELD);
     }
 
-    private DBObjectToVariantSourceEntryConverter variantSourceEntryConverter;
-    private DBObjectToVariantAnnotationConverter variantAnnotationConverter;
-    private DBObjectToVariantStatsConverter statsConverter;
+    private DocumentToVariantSourceEntryConverter variantSourceEntryConverter;
+    private DocumentToVariantAnnotationConverter variantAnnotationConverter;
+    private DocumentToVariantStatsConverter statsConverter;
 
     /**
-     * Create a converter between Variant and DBObject entities when there is 
+     * Create a converter between Variant and Document entities when there is 
      * no need to convert the files the variant was read from.
      */
-    public DBObjectToVariantConverter() {
+    public DocumentToVariantConverter() {
         this(null, null);
     }
 
     /**
-     * Create a converter between Variant and DBObject entities. A converter for 
+     * Create a converter between Variant and Document entities. A converter for 
      * the files the variant was read from can be provided in case those 
      * should be processed during the conversion.
      *
      * @param variantSourceEntryConverter The object used to convert the files
      * @param statsConverter
      */
-    public DBObjectToVariantConverter(DBObjectToVariantSourceEntryConverter variantSourceEntryConverter, DBObjectToVariantStatsConverter statsConverter) {
+    public DocumentToVariantConverter(DocumentToVariantSourceEntryConverter variantSourceEntryConverter, DocumentToVariantStatsConverter statsConverter) {
         this.variantSourceEntryConverter = variantSourceEntryConverter;
-        this.variantAnnotationConverter = new DBObjectToVariantAnnotationConverter();
+        this.variantAnnotationConverter = new DocumentToVariantAnnotationConverter();
         this.statsConverter = statsConverter;
     }
     
     
     @Override
-    public Variant convertToDataModelType(DBObject object) {
+    public Variant convertToDataModelType(Document object) {
         String chromosome = (String) object.get(CHROMOSOME_FIELD);
-        int start = getDbObjectNumericFieldAsInt(object.get(START_FIELD));
-        int end = getDbObjectNumericFieldAsInt(object.get(END_FIELD));
+        int start = getDocumentNumericFieldAsInt(object.get(START_FIELD));
+        int end = getDocumentNumericFieldAsInt(object.get(END_FIELD));
         String reference = (String) object.get(REFERENCE_FIELD);
         String alternate = (String) object.get(ALTERNATE_FIELD);
         Variant variant = new Variant(chromosome, start, end, reference, alternate);
-        if (object.containsField(IDS_FIELD)) {
+        if (object.containsKey(IDS_FIELD)) {
             Object ids = object.get(IDS_FIELD);
             variant.setIds(new HashSet<String>(((Collection<String>) ids)));
         } else {
@@ -110,27 +110,27 @@ public class DBObjectToVariantConverter implements ComplexTypeConverter<Variant,
         }
 
         // Transform HGVS: List of map entries -> Map of lists
-        BasicDBList mongoHgvs = (BasicDBList) object.get(HGVS_FIELD);
+        BasicDBList mongoHgvs = ArrayToBasicDBListConverter.toBasicDBList(object.get(HGVS_FIELD));
         if (mongoHgvs != null) {
             for (Object o : mongoHgvs) {
-                DBObject dbo = (DBObject) o;
+                Document dbo = (Document) o;
                 variant.addHgvs((String) dbo.get(TYPE_FIELD), (String) dbo.get(NAME_FIELD));
             }
         }
-        
+
         // Files
         if (variantSourceEntryConverter != null) {
-            BasicDBList mongoFiles = (BasicDBList) object.get(FILES_FIELD);
+            BasicDBList mongoFiles = ArrayToBasicDBListConverter.toBasicDBList(object.get(FILES_FIELD));
             if (mongoFiles != null) {
                 for (Object o : mongoFiles) {
-                    DBObject dbo = (DBObject) o;
+                    Document dbo = (Document) o;
                     variant.addSourceEntry(variantSourceEntryConverter.convertToDataModelType(dbo));
                 }
             }
         }
 
         // Annotations
-        DBObject mongoAnnotation = (DBObject) object.get(ANNOTATION_FIELD);
+        Document mongoAnnotation = (Document) object.get(ANNOTATION_FIELD);
         if (mongoAnnotation != null) {
             VariantAnnotation annotation = variantAnnotationConverter.convertToDataModelType(mongoAnnotation);
             annotation.setChromosome(variant.getChromosome());
@@ -139,16 +139,15 @@ public class DBObjectToVariantConverter implements ComplexTypeConverter<Variant,
             annotation.setStart(variant.getStart());
             variant.setAnnotation(annotation);
         }
-        
+
         // Statistics
-        if (statsConverter != null && object.containsField(STATS_FIELD)) {
-            DBObject stats = (DBObject) object.get(STATS_FIELD);
-            statsConverter.convertCohortsToDataModelType(stats, variant);
+        if (statsConverter != null && object.containsKey(STATS_FIELD)) {
+            statsConverter.convertCohortsToDataModelType(object.get(STATS_FIELD), variant);
         }
         return variant;
     }
 
-    private int getDbObjectNumericFieldAsInt(Object field) {
+    private int getDocumentNumericFieldAsInt(Object field) {
         if (field instanceof Integer) {
             return (int)field;
         } else {
@@ -157,9 +156,9 @@ public class DBObjectToVariantConverter implements ComplexTypeConverter<Variant,
     }
 
     @Override
-    public DBObject convertToStorageType(Variant object) {
+    public Document convertToStorageType(Variant object) {
         // Attributes easily calculated
-        BasicDBObject mongoVariant = new BasicDBObject("_id", buildStorageId(object))
+        Document mongoVariant = new Document("_id", buildStorageId(object))
 //                .append(IDS_FIELD, object.getIds())    //Do not include IDs.
                 .append(TYPE_FIELD, object.getType().name())
                 .append(CHROMOSOME_FIELD, object.getChromosome())
@@ -170,24 +169,24 @@ public class DBObjectToVariantConverter implements ComplexTypeConverter<Variant,
                 .append(ALTERNATE_FIELD, object.getAlternate());
 
         // Internal fields used for query optimization (dictionary named "_at")
-        BasicDBObject _at = new BasicDBObject();
+        Document _at = new Document();
         mongoVariant.append("_at", _at);
-        
+
         // ChunkID (1k and 10k)
         String chunkSmall = object.getChromosome() + "_" + object.getStart() / VariantMongoDBWriter.CHUNK_SIZE_SMALL + "_" + VariantMongoDBWriter.CHUNK_SIZE_SMALL / 1000 + "k";
         String chunkBig = object.getChromosome() + "_" + object.getStart() / VariantMongoDBWriter.CHUNK_SIZE_BIG + "_" + VariantMongoDBWriter.CHUNK_SIZE_BIG / 1000 + "k";
         BasicDBList chunkIds = new BasicDBList(); chunkIds.add(chunkSmall); chunkIds.add(chunkBig);
         _at.append("chunkIds", chunkIds);
-        
+
         // Transform HGVS: Map of lists -> List of map entries
         BasicDBList hgvs = new BasicDBList();
         for (Map.Entry<String, Set<String>> entry : object.getHgvs().entrySet()) {
             for (String value : entry.getValue()) {
-                hgvs.add(new BasicDBObject(TYPE_FIELD, entry.getKey()).append(NAME_FIELD, value));
+                hgvs.add(new Document(TYPE_FIELD, entry.getKey()).append(NAME_FIELD, value));
             }
         }
         mongoVariant.append(HGVS_FIELD, hgvs);
-        
+
         // Files
         if (variantSourceEntryConverter != null) {
             BasicDBList mongoFiles = new BasicDBList();
@@ -200,7 +199,7 @@ public class DBObjectToVariantConverter implements ComplexTypeConverter<Variant,
 //        // Annotations
 //        if (variantAnnotationConverter != null) {
 //            if (object.getAnnotation() != null) {
-//                DBObject annotation = variantAnnotationConverter.convertToStorageType(object.getAnnotation());
+//                Document annotation = variantAnnotationConverter.convertToStorageType(object.getAnnotation());
 //                mongoVariant.append(ANNOTATION_FIELD, annotation);
 //            }
 //        }

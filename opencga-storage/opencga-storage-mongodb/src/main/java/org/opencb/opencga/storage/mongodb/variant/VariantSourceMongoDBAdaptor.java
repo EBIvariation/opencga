@@ -1,12 +1,10 @@
 package org.opencb.opencga.storage.mongodb.variant;
 
-import com.mongodb.BasicDBObject;
-import com.mongodb.DBObject;
 import com.mongodb.QueryBuilder;
 import java.net.UnknownHostException;
 import java.util.*;
 
-import com.mongodb.WriteResult;
+import org.bson.Document;
 import org.opencb.biodata.models.variant.VariantSource;
 import org.opencb.biodata.models.variant.stats.VariantGlobalStats;
 import org.opencb.biodata.models.variant.stats.VariantSourceStats;
@@ -29,7 +27,7 @@ public class VariantSourceMongoDBAdaptor implements VariantSourceDBAdaptor {
     
     private final MongoDataStoreManager mongoManager;
     private final MongoDataStore db;
-    private final DBObjectToVariantSourceConverter variantSourceConverter;
+    private final DocumentToVariantSourceConverter variantSourceConverter;
     private final String collectionName;
 
     
@@ -39,7 +37,7 @@ public class VariantSourceMongoDBAdaptor implements VariantSourceDBAdaptor {
         MongoDBConfiguration mongoDBConfiguration = credentials.getMongoDBConfiguration();
         db = mongoManager.get(credentials.getMongoDbName(), mongoDBConfiguration);
         this.collectionName = collectionName;
-        variantSourceConverter = new DBObjectToVariantSourceConverter();
+        variantSourceConverter = new DocumentToVariantSourceConverter();
     }
 
     @Override
@@ -54,7 +52,7 @@ public class VariantSourceMongoDBAdaptor implements VariantSourceDBAdaptor {
         QueryBuilder qb = QueryBuilder.start();
         parseQueryOptions(options, qb);
         
-        return coll.find(qb.get(), null, variantSourceConverter, options);
+        return coll.find(new Document(qb.get().toMap()), null, variantSourceConverter, options);
     }
 
     @Override
@@ -70,7 +68,7 @@ public class VariantSourceMongoDBAdaptor implements VariantSourceDBAdaptor {
         options.put("studyId", studyIds);
         parseQueryOptions(options, qb);
         
-        return coll.find(qb.get(), null, variantSourceConverter, options);
+        return coll.find(new Document(qb.get().toMap()), null, variantSourceConverter, options);
     }
 
     @Override
@@ -131,16 +129,16 @@ public class VariantSourceMongoDBAdaptor implements VariantSourceDBAdaptor {
     private void parseQueryOptions(QueryOptions options, QueryBuilder builder) {
 
         if(options.containsKey("studyId")) {
-            andIs(DBObjectToVariantSourceConverter.STUDYID_FIELD, options.get("studyId"), builder);
+            andIs(DocumentToVariantSourceConverter.STUDYID_FIELD, options.get("studyId"), builder);
         }
         if(options.containsKey("studyName")) {
-            andIs(DBObjectToVariantSourceConverter.STUDYNAME_FIELD, options.get("studyId"), builder);
+            andIs(DocumentToVariantSourceConverter.STUDYNAME_FIELD, options.get("studyId"), builder);
         }
         if(options.containsKey("fileId")) {
-            andIs(DBObjectToVariantSourceConverter.FILEID_FIELD, options.get("fileId"), builder);
+            andIs(DocumentToVariantSourceConverter.FILEID_FIELD, options.get("fileId"), builder);
         }
         if(options.containsKey("fileName")) {
-            andIs(DBObjectToVariantSourceConverter.FILENAME_FIELD, options.get("fileName"), builder);
+            andIs(DocumentToVariantSourceConverter.FILENAME_FIELD, options.get("fileName"), builder);
         }
 
 
@@ -157,11 +155,11 @@ public class VariantSourceMongoDBAdaptor implements VariantSourceDBAdaptor {
     }
 //
 //    private QueryBuilder getStudyIdFilter(String id, QueryBuilder builder) {
-//        return builder.and(DBObjectToVariantSourceConverter.STUDYID_FIELD).is(id);
+//        return builder.and(DocumentToVariantSourceConverter.STUDYID_FIELD).is(id);
 //    }
 //
 //    private QueryBuilder getStudyIdFilter(List<String> ids, QueryBuilder builder) {
-//        return builder.and(DBObjectToVariantSourceConverter.STUDYID_FIELD).in(ids);
+//        return builder.and(DocumentToVariantSourceConverter.STUDYID_FIELD).in(ids);
 //    }
     
     /**
@@ -171,20 +169,20 @@ public class VariantSourceMongoDBAdaptor implements VariantSourceDBAdaptor {
      */
     private QueryResult populateSamplesInSources() {
         MongoDBCollection coll = db.getCollection(collectionName);
-        DBObject projection = new BasicDBObject(DBObjectToVariantSourceConverter.FILEID_FIELD, true)
-                .append(DBObjectToVariantSourceConverter.SAMPLES_FIELD, true);
-        QueryResult queryResult = coll.find((DBObject)null, projection, null);
+        Document projection = new Document(DocumentToVariantSourceConverter.FILEID_FIELD, true)
+                .append(DocumentToVariantSourceConverter.SAMPLES_FIELD, true);
+        QueryResult queryResult = coll.find(new Document(), projection, null);
         
-        List<DBObject> result = queryResult.getResult();
+        List<Document> result = queryResult.getResult();
         samplesInSources.clear();
-        for (DBObject dbo : result) {
-            String key = dbo.get(DBObjectToVariantSourceConverter.FILEID_FIELD).toString();
-            DBObject value = (DBObject) dbo.get(DBObjectToVariantSourceConverter.SAMPLES_FIELD);
+        for (Document dbo : result) {
+            String key = dbo.get(DocumentToVariantSourceConverter.FILEID_FIELD).toString();
+            Document value = (Document) dbo.get(DocumentToVariantSourceConverter.SAMPLES_FIELD);
 
             // replace '£' by '.'
             List<String> sampleNames = new ArrayList<>();
             for (String mongoSampleName : value.keySet()) {
-                sampleNames.add(mongoSampleName.replace(DBObjectToVariantSourceConverter.CHARACTER_TO_REPLACE_DOTS, '.'));
+                sampleNames.add(mongoSampleName.replace(DocumentToVariantSourceConverter.CHARACTER_TO_REPLACE_DOTS, '.'));
             }
             samplesInSources.put(key, sampleNames);
         }
@@ -240,18 +238,18 @@ public class VariantSourceMongoDBAdaptor implements VariantSourceDBAdaptor {
         MongoDBCollection coll = db.getCollection(collectionName);
 
         VariantGlobalStats global = variantSourceStats.getFileStats();
-        DBObject globalStats = new BasicDBObject(DBObjectToVariantSourceConverter.NUMSAMPLES_FIELD, global.getSamplesCount())
-                .append(DBObjectToVariantSourceConverter.NUMVARIANTS_FIELD, global.getVariantsCount())
-                .append(DBObjectToVariantSourceConverter.NUMSNPS_FIELD, global.getSnpsCount())
-                .append(DBObjectToVariantSourceConverter.NUMINDELS_FIELD, global.getIndelsCount())
-                .append(DBObjectToVariantSourceConverter.NUMPASSFILTERS_FIELD, global.getPassCount())
-                .append(DBObjectToVariantSourceConverter.NUMTRANSITIONS_FIELD, global.getTransitionsCount())
-                .append(DBObjectToVariantSourceConverter.NUMTRANSVERSIONS_FIELD, global.getTransversionsCount())
-                .append(DBObjectToVariantSourceConverter.MEANQUALITY_FIELD, (double) global.getMeanQuality());
+        Document globalStats = new Document(DocumentToVariantSourceConverter.NUMSAMPLES_FIELD, global.getSamplesCount())
+                .append(DocumentToVariantSourceConverter.NUMVARIANTS_FIELD, global.getVariantsCount())
+                .append(DocumentToVariantSourceConverter.NUMSNPS_FIELD, global.getSnpsCount())
+                .append(DocumentToVariantSourceConverter.NUMINDELS_FIELD, global.getIndelsCount())
+                .append(DocumentToVariantSourceConverter.NUMPASSFILTERS_FIELD, global.getPassCount())
+                .append(DocumentToVariantSourceConverter.NUMTRANSITIONS_FIELD, global.getTransitionsCount())
+                .append(DocumentToVariantSourceConverter.NUMTRANSVERSIONS_FIELD, global.getTransversionsCount())
+                .append(DocumentToVariantSourceConverter.MEANQUALITY_FIELD, (double) global.getMeanQuality());
 
-        DBObject find = new BasicDBObject(DBObjectToVariantSourceConverter.FILEID_FIELD, variantSourceStats.getFileId())
-                .append(DBObjectToVariantSourceConverter.STUDYID_FIELD, variantSourceStats.getStudyId());
-        DBObject update = new BasicDBObject("$set", new BasicDBObject(DBObjectToVariantSourceConverter.STATS_FIELD, globalStats));
+        Document find = new Document(DocumentToVariantSourceConverter.FILEID_FIELD, variantSourceStats.getFileId())
+                .append(DocumentToVariantSourceConverter.STUDYID_FIELD, variantSourceStats.getStudyId());
+        Document update = new Document("$set", new Document(DocumentToVariantSourceConverter.STATS_FIELD, globalStats));
 
         return coll.update(find, update, null);
     }

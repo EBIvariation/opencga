@@ -2,11 +2,20 @@ package org.opencb.opencga.storage.mongodb.variant;
 
 import com.mongodb.*;
 
-import java.net.UnknownHostException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.InsertOneModel;
+import com.mongodb.client.model.UpdateOneModel;
+import com.mongodb.client.model.UpdateOptions;
+import com.mongodb.client.model.WriteModel;
+import org.bson.Document;
 import org.opencb.biodata.models.variant.VariantSourceEntry;
 import org.opencb.biodata.models.variant.Variant;
 import org.opencb.biodata.models.variant.VariantSource;
@@ -14,9 +23,7 @@ import org.opencb.biodata.models.variant.annotation.ConsequenceTypeMappings;
 import org.opencb.biodata.models.variant.annotation.VariantEffect;
 import org.opencb.datastore.core.QueryOptions;
 import org.opencb.datastore.core.QueryResult;
-import org.opencb.datastore.core.config.DataStoreServerAddress;
 import org.opencb.datastore.mongodb.MongoDBCollection;
-import org.opencb.datastore.mongodb.MongoDBConfiguration;
 import org.opencb.datastore.mongodb.MongoDataStore;
 import org.opencb.datastore.mongodb.MongoDataStoreManager;
 import org.opencb.opencga.storage.core.variant.VariantStorageManager;
@@ -48,12 +55,12 @@ public class VariantMongoDBWriter extends VariantDBWriter {
     private String variantsCollectionName;
 
 //    @Deprecated private MongoClient mongoClient;
-    @Deprecated private DB db;
-    @Deprecated private DBCollection filesCollection;
-    @Deprecated private DBCollection variantsCollection;
+    @Deprecated private MongoDatabase db;
+    @Deprecated private MongoCollection<Document> filesCollection;
+    @Deprecated private MongoCollection<Document> variantsCollection;
 
-    @Deprecated private Map<String, DBObject> mongoMap;
-    @Deprecated private Map<String, DBObject> mongoFileMap;
+    @Deprecated private Map<String, Document> mongoMap;
+    @Deprecated private Map<String, Document> mongoFileMap;
 
 
     private boolean includeStats;
@@ -67,15 +74,15 @@ public class VariantMongoDBWriter extends VariantDBWriter {
     @Deprecated private List<String> samples;
     @Deprecated private Map<String, Integer> conseqTypes;
 
-    private DBObjectToVariantConverter variantConverter;
-    private DBObjectToVariantStatsConverter statsConverter;
-    private DBObjectToVariantSourceConverter sourceConverter;
-    private DBObjectToVariantSourceEntryConverter sourceEntryConverter;
-    private DBObjectToSamplesConverter sampleConverter;
+    private DocumentToVariantConverter variantConverter;
+    private DocumentToVariantStatsConverter statsConverter;
+    private DocumentToVariantSourceConverter sourceConverter;
+    private DocumentToVariantSourceEntryConverter sourceEntryConverter;
+    private DocumentToSamplesConverter sampleConverter;
 
     private long numVariantsWritten;
 
-    private BulkWriteOperation bulk;
+    private List<WriteModel<Document>> documentsToBulkWrite = new ArrayList<>();
     private int currentBulkSize = 0;
     private int bulkSize = 0;
 
@@ -196,13 +203,13 @@ public class VariantMongoDBWriter extends VariantDBWriter {
         }
 
         long startQuery = System.nanoTime();
-        BasicDBObject query = new BasicDBObject("_id", new BasicDBObject("$in", variantIds));
-        QueryResult<DBObject> idsResult =
-                variantMongoCollection.find(query, new BasicDBObject("_id", true), null);
+        Document query = new Document("_id", new Document("$in", variantIds));
+        QueryResult<Document> idsResult =
+                variantMongoCollection.find(query, new Document("_id", true), null);
         this.checkExistsDBTime += System.nanoTime() - startQuery;
 
-        for (DBObject dbObject : idsResult.getResult()) {
-            String id = dbObject.get("_id").toString();
+        for (Document dbDocument : idsResult.getResult()) {
+            String id = dbDocument.get("_id").toString();
             existingVariants.add(id);
         }
         this.checkExistsTime += System.nanoTime() - start1;
@@ -214,25 +221,31 @@ public class VariantMongoDBWriter extends VariantDBWriter {
             String id = variantConverter.buildStorageId(variant);
 
             if (!existingVariants.contains(id)) {
-                DBObject variantDocument = variantConverter.convertToStorageType(variant);
-                List<DBObject> mongoFiles = new LinkedList<>();
+                Document variantDocument = variantConverter.convertToStorageType(variant);
+                List<Document> mongoFiles = new LinkedList<>();
                 for (VariantSourceEntry variantSourceEntry : variant.getSourceEntries().values()) {
                     if (!variantSourceEntry.getFileId().equals(source.getFileId())) {
                         continue;
                     }
-                    DBObject mongoFile = sourceEntryConverter.convertToStorageType(variantSourceEntry);
+                    Document mongoFile = sourceEntryConverter.convertToStorageType(variantSourceEntry);
                     mongoFiles.add(mongoFile);
                 }
-                variantDocument.put(DBObjectToVariantConverter.FILES_FIELD, mongoFiles);
-                bulk.insert(variantDocument);
+                variantDocument.put(DocumentToVariantConverter.FILES_FIELD, mongoFiles);
+                this.documentsToBulkWrite.add(new InsertOneModel<>(variantDocument));
                 currentBulkSize++;
             } else {
                 for (VariantSourceEntry variantSourceEntry : variant.getSourceEntries().values()) {
                     if (!variantSourceEntry.getFileId().equals(source.getFileId())) {
                         continue;
                     }
-                    bulk.find(new BasicDBObject("_id", id)).updateOne(new BasicDBObject().append("$push",
-                            new BasicDBObject(DBObjectToVariantConverter.FILES_FIELD, sourceEntryConverter.convertToStorageType(variantSourceEntry))));
+//                    bulk.find(new Document("_id", id)).updateOne(new Document().append("$push",
+//                                                                                                 new Document(DocumentToVariantConverter.FILES_FIELD, sourceEntryConverter.convertToStorageType(variantSourceEntry))));
+                    Document filter = new Document("_id", id);
+                    Document update = new Document().append("$push",
+                                                            new Document(DocumentToVariantConverter.FILES_FIELD,
+                                                                         sourceEntryConverter.convertToStorageType(
+                                                                                 variantSourceEntry)));
+                    this.documentsToBulkWrite.add(new UpdateOneModel(filter, update));
                     currentBulkSize++;
                 }
             }
@@ -261,29 +274,30 @@ public class VariantMongoDBWriter extends VariantDBWriter {
                 }
 
                 // the chromosome and start appear just as shard keys, in an unsharded cluster they wouldn't be needed
-                BasicDBObject query = new BasicDBObject("_id", id)
-                        .append(DBObjectToVariantConverter.CHROMOSOME_FIELD, variant.getChromosome())
-                        .append(DBObjectToVariantConverter.START_FIELD, variant.getStart());
+                Document query = new Document("_id", id)
+                        .append(DocumentToVariantConverter.CHROMOSOME_FIELD, variant.getChromosome())
+                        .append(DocumentToVariantConverter.START_FIELD, variant.getStart());
 
-                BasicDBObject addToSet = new BasicDBObject()
-                        .append(DBObjectToVariantConverter.FILES_FIELD,
+                Document addToSet = new Document()
+                        .append(DocumentToVariantConverter.FILES_FIELD,
                                 sourceEntryConverter.convertToStorageType(variantSourceEntry));
 
                 if (includeStats) {
-                    List<DBObject> sourceEntryStats = statsConverter.convertCohortsToStorageType(variantSourceEntry.getCohortStats(),
+                    List<Document> sourceEntryStats = statsConverter.convertCohortsToStorageType(variantSourceEntry.getCohortStats(),
                             variantSourceEntry.getStudyId(), variantSourceEntry.getFileId());
-                    addToSet.put(DBObjectToVariantConverter.STATS_FIELD, new BasicDBObject("$each", sourceEntryStats));
+                    addToSet.put(DocumentToVariantConverter.STATS_FIELD, new Document("$each", sourceEntryStats));
                 }
 
                 if (variant.getIds() != null && !variant.getIds().isEmpty()) {
-                    addToSet.put(DBObjectToVariantConverter.IDS_FIELD, new BasicDBObject("$each", variant.getIds()));
+                    addToSet.put(DocumentToVariantConverter.IDS_FIELD, new Document("$each", variant.getIds()));
                 }
 
-                BasicDBObject update = new BasicDBObject()
+                Document update = new Document()
                         .append("$addToSet", addToSet)
                         .append("$setOnInsert", variantConverter.convertToStorageType(variant));    // assuming variantConverter.statsConverter == null
 
-                bulk.find(query).upsert().updateOne(update);
+                //bulk.find(query).upsert().updateOne(update);
+                this.documentsToBulkWrite.add(new UpdateOneModel<>(query, update, new UpdateOptions().upsert(true)));
 
                 currentBulkSize++;
             }
@@ -300,7 +314,7 @@ public class VariantMongoDBWriter extends VariantDBWriter {
         for (Variant v : data) {
             // Check if this variant is already stored
             String rowkey = variantConverter.buildStorageId(v);
-            DBObject mongoVariant = new BasicDBObject("_id", rowkey);
+            Document mongoVariant = new Document("_id", rowkey);
 
             if (variantsCollection.count(mongoVariant) == 0) {
                 mongoVariant = variantConverter.convertToStorageType(v);
@@ -321,12 +335,12 @@ public class VariantMongoDBWriter extends VariantDBWriter {
                     samples.addAll(archiveFile.getSampleNames());
                 }
 
-                DBObject mongoFile = sourceEntryConverter.convertToStorageType(archiveFile);
+                Document mongoFile = sourceEntryConverter.convertToStorageType(archiveFile);
                 mongoFiles.add(mongoFile);
                 mongoFileMap.put(rowkey + "_" + archiveFile.getFileId(), mongoFile);
             }
 
-            mongoVariant.put(DBObjectToVariantConverter.FILES_FIELD, mongoFiles);
+            mongoVariant.put(DocumentToVariantConverter.FILES_FIELD, mongoFiles);
             mongoMap.put(rowkey, mongoVariant);
         }
 
@@ -336,9 +350,9 @@ public class VariantMongoDBWriter extends VariantDBWriter {
     @Override @Deprecated
     protected boolean buildEffectRaw(List<Variant> variants) {
         for (Variant v : variants) {
-            DBObject mongoVariant = mongoMap.get(variantConverter.buildStorageId(v));
+            Document mongoVariant = mongoMap.get(variantConverter.buildStorageId(v));
 
-            if (!mongoVariant.containsField(DBObjectToVariantConverter.CHROMOSOME_FIELD)) {
+            if (!mongoVariant.containsKey(DocumentToVariantConverter.CHROMOSOME_FIELD)) {
                 // TODO It means that the same position was already found in this file, so __for now__ it won't be processed again
                 continue;
             }
@@ -348,16 +362,16 @@ public class VariantMongoDBWriter extends VariantDBWriter {
 
             // Add effects to file
             if (!v.getAnnotation().getEffects().isEmpty()) {
-                Set<BasicDBObject> effectsSet = new HashSet<>();
+                Set<Document> effectsSet = new HashSet<>();
 
                 for (List<VariantEffect> effects : v.getAnnotation().getEffects().values()) {
                     for (VariantEffect effect : effects) {
-                        BasicDBObject object = getVariantEffectDBObject(effect);
+                        Document object = getVariantEffectDocument(effect);
                         effectsSet.add(object);
 
                         addConsequenceType(effect);
                         soSet.addAll(Arrays.asList((String[]) object.get("so")));
-                        if (object.containsField("geneName")) {
+                        if (object.containsKey("geneName")) {
                             genesSet.add(object.get("geneName").toString());
                         }
                     }
@@ -369,7 +383,7 @@ public class VariantMongoDBWriter extends VariantDBWriter {
             }
 
             // Add gene fields directly to the variant, for query optimization purposes
-            BasicDBObject _at = (BasicDBObject) mongoVariant.get("_at");
+            Document _at = (Document) mongoVariant.get("_at");
             if (!genesSet.isEmpty()) {
                 BasicDBList genesList = new BasicDBList(); genesList.addAll(genesSet);
                 _at.append("gn", genesList);
@@ -384,13 +398,13 @@ public class VariantMongoDBWriter extends VariantDBWriter {
     }
 
     @Deprecated
-    private BasicDBObject getVariantEffectDBObject(VariantEffect effect) {
+    private Document getVariantEffectDocument(VariantEffect effect) {
         String[] consequenceTypes = new String[effect.getConsequenceTypes().length];
         for (int i = 0; i < effect.getConsequenceTypes().length; i++) {
             consequenceTypes[i] = ConsequenceTypeMappings.accessionToTerm.get(effect.getConsequenceTypes()[i]);
         }
 
-        BasicDBObject object = new BasicDBObject("so", consequenceTypes).append("featureId", effect.getFeatureId());
+        Document object = new Document("so", consequenceTypes).append("featureId", effect.getFeatureId());
         if (effect.getGeneName() != null && !effect.getGeneName().isEmpty()) {
             object.append("geneName", effect.getGeneName());
         }
@@ -399,13 +413,13 @@ public class VariantMongoDBWriter extends VariantDBWriter {
 
     @Override @Deprecated
     protected boolean buildBatchIndex(List<Variant> data) {
-//        variantsCollection.createIndex(new BasicDBObject("_at.chunkIds", 1));
-//        variantsCollection.createIndex(new BasicDBObject("_at.gn", 1));
-//        variantsCollection.createIndex(new BasicDBObject("_at.ct", 1));
-//        variantsCollection.createIndex(new BasicDBObject(DBObjectToVariantConverter.ID_FIELD, 1));
-//        variantsCollection.createIndex(new BasicDBObject(DBObjectToVariantConverter.CHROMOSOME_FIELD, 1));
-//        variantsCollection.createIndex(new BasicDBObject(DBObjectToVariantConverter.FILES_FIELD + "." + DBObjectToVariantSourceEntryConverter.STUDYID_FIELD, 1)
-//                .append(DBObjectToVariantConverter.FILES_FIELD + "." + DBObjectToVariantSourceEntryConverter.FILEID_FIELD, 1));
+//        variantsCollection.createIndex(new Document("_at.chunkIds", 1));
+//        variantsCollection.createIndex(new Document("_at.gn", 1));
+//        variantsCollection.createIndex(new Document("_at.ct", 1));
+//        variantsCollection.createIndex(new Document(DocumentToVariantConverter.ID_FIELD, 1));
+//        variantsCollection.createIndex(new Document(DocumentToVariantConverter.CHROMOSOME_FIELD, 1));
+//        variantsCollection.createIndex(new Document(DocumentToVariantConverter.FILES_FIELD + "." + DocumentToVariantSourceEntryConverter.STUDYID_FIELD, 1)
+//                .append(DocumentToVariantConverter.FILES_FIELD + "." + DocumentToVariantSourceEntryConverter.FILEID_FIELD, 1));
         return true;
     }
 
@@ -413,37 +427,34 @@ public class VariantMongoDBWriter extends VariantDBWriter {
     protected boolean writeBatch(List<Variant> batch) {
         for (Variant v : batch) {
             String rowkey = variantConverter.buildStorageId(v);
-            DBObject mongoVariant = mongoMap.get(rowkey);
-            DBObject query = new BasicDBObject("_id", rowkey);
+            Document mongoVariant = mongoMap.get(rowkey);
+            Document query = new Document("_id", rowkey);
             WriteResult wr;
 
-            if (mongoVariant.containsField(DBObjectToVariantConverter.CHROMOSOME_FIELD)) {
+            if (mongoVariant.containsKey(DocumentToVariantConverter.CHROMOSOME_FIELD)) {
                 // Was fully built in this run because it didn't exist, and must be inserted
                 try {
-                    wr = variantsCollection.insert(mongoVariant);
-                    if (!wr.getLastError().ok()) {
-                        // TODO If not correct, retry?
-                        Logger.getLogger(VariantMongoDBWriter.class.getName()).log(Level.SEVERE, wr.getError(), wr.getLastError());
-                    }
+                    variantsCollection.insertOne(mongoVariant);
                 } catch(MongoInternalException ex) {
                     System.out.println(v);
                     Logger.getLogger(VariantMongoDBWriter.class.getName()).log(Level.SEVERE, v.getChromosome() + ":" + v.getStart(), ex);
-                } catch(DuplicateKeyException ex) {
+                } catch(MongoWriteException ex) {
                     Logger.getLogger(VariantMongoDBWriter.class.getName()).log(Level.WARNING,
                             "Variant already existed: {0}:{1}", new Object[]{v.getChromosome(), v.getStart()});
+                } catch(MongoException ex) {
+                    Logger.getLogger(VariantMongoDBWriter.class.getName()).log(Level.SEVERE, ex.getMessage());
                 }
 
             } else { // It existed previously, was not fully built in this run and only files need to be updated
                 // TODO How to do this efficiently, inserting all files at once?
                 for (VariantSourceEntry archiveFile : v.getSourceEntries().values()) {
-                    DBObject mongoFile = mongoFileMap.get(rowkey + "_" + archiveFile.getFileId());
-                    BasicDBObject changes = new BasicDBObject().append("$addToSet",
-                            new BasicDBObject(DBObjectToVariantConverter.FILES_FIELD, mongoFile));
-
-                    wr = variantsCollection.update(query, changes, true, false);
-                    if (!wr.getLastError().ok()) {
-                        // TODO If not correct, retry?
-                        Logger.getLogger(VariantMongoDBWriter.class.getName()).log(Level.SEVERE, wr.getError(), wr.getLastError());
+                    Document mongoFile = mongoFileMap.get(rowkey + "_" + archiveFile.getFileId());
+                    Document changes = new Document().append("$addToSet",
+                            new Document(DocumentToVariantConverter.FILES_FIELD, mongoFile));
+                    try {
+                        variantsCollection.updateOne(query, changes, new UpdateOptions().upsert(true));
+                    } catch (MongoException ex) {
+                        Logger.getLogger(VariantMongoDBWriter.class.getName()).log(Level.SEVERE, ex.getMessage());
                     }
                 }
             }
@@ -463,8 +474,8 @@ public class VariantMongoDBWriter extends VariantDBWriter {
 
     private boolean writeSourceSummary(VariantSource source) {
         if (!variantSourceWritten.getAndSet(true)) {
-            DBObject studyMongo = sourceConverter.convertToStorageType(source);
-            DBObject query = new BasicDBObject(DBObjectToVariantSourceConverter.FILEID_FIELD, source.getFileId());
+            Document studyMongo = sourceConverter.convertToStorageType(source);
+            Document query = new Document(DocumentToVariantSourceConverter.FILEID_FIELD, source.getFileId());
             filesMongoCollection.update(query, studyMongo, new QueryOptions("upsert", true));
         }
         return true;
@@ -478,21 +489,21 @@ public class VariantMongoDBWriter extends VariantDBWriter {
         logger.info("POST");
         writeSourceSummary(source);
 
-        DBObject onBackground = new BasicDBObject("background", true);
-        variantMongoCollection.createIndex(new BasicDBObject("_at.chunkIds", 1), onBackground);
-        variantMongoCollection.createIndex(new BasicDBObject("annot.xrefs.id", 1), onBackground);
-        variantMongoCollection.createIndex(new BasicDBObject("annot.ct.so", 1), onBackground);
-        variantMongoCollection.createIndex(new BasicDBObject(DBObjectToVariantConverter.IDS_FIELD, 1), onBackground);
-        variantMongoCollection.createIndex(new BasicDBObject(DBObjectToVariantConverter.CHROMOSOME_FIELD, 1), onBackground);
+        Document onBackground = new Document("background", true);
+        variantMongoCollection.createIndex(new Document("_at.chunkIds", 1), onBackground);
+        variantMongoCollection.createIndex(new Document("annot.xrefs.id", 1), onBackground);
+        variantMongoCollection.createIndex(new Document("annot.ct.so", 1), onBackground);
+        variantMongoCollection.createIndex(new Document(DocumentToVariantConverter.IDS_FIELD, 1), onBackground);
+        variantMongoCollection.createIndex(new Document(DocumentToVariantConverter.CHROMOSOME_FIELD, 1), onBackground);
         variantMongoCollection.createIndex(
-                new BasicDBObject(DBObjectToVariantConverter.FILES_FIELD + "." + DBObjectToVariantSourceEntryConverter.STUDYID_FIELD, 1)
-                        .append(DBObjectToVariantConverter.FILES_FIELD + "." + DBObjectToVariantSourceEntryConverter.FILEID_FIELD, 1), onBackground);
-        variantMongoCollection.createIndex(new BasicDBObject("st.maf", 1), onBackground);
-        variantMongoCollection.createIndex(new BasicDBObject("st.mgf", 1), onBackground);
+                new Document(DocumentToVariantConverter.FILES_FIELD + "." + DocumentToVariantSourceEntryConverter.STUDYID_FIELD, 1)
+                        .append(DocumentToVariantConverter.FILES_FIELD + "." + DocumentToVariantSourceEntryConverter.FILEID_FIELD, 1), onBackground);
+        variantMongoCollection.createIndex(new Document("st.maf", 1), onBackground);
+        variantMongoCollection.createIndex(new Document("st.mgf", 1), onBackground);
         variantMongoCollection.createIndex(
-                new BasicDBObject(DBObjectToVariantConverter.CHROMOSOME_FIELD, 1)
-                        .append(DBObjectToVariantConverter.START_FIELD, 1)
-                        .append(DBObjectToVariantConverter.END_FIELD, 1), onBackground);
+                new Document(DocumentToVariantConverter.CHROMOSOME_FIELD, 1)
+                        .append(DocumentToVariantConverter.START_FIELD, 1)
+                        .append(DocumentToVariantConverter.END_FIELD, 1), onBackground);
         logger.debug("sent order to create indices");
 
         logger.debug("checkExistsTime " + checkExistsTime / 1000000.0 + "ms ");
@@ -545,11 +556,11 @@ public class VariantMongoDBWriter extends VariantDBWriter {
             samplesIds = source.getSamplesPosition();
         }
 
-        sourceConverter = new DBObjectToVariantSourceConverter();
-        statsConverter = includeStats ? new DBObjectToVariantStatsConverter() : null;
-        sampleConverter = includeSamples ? new DBObjectToSamplesConverter(compressDefaultGenotype, samplesIds): null; //TODO: Add default genotype
+        sourceConverter = new DocumentToVariantSourceConverter();
+        statsConverter = includeStats ? new DocumentToVariantStatsConverter() : null;
+        sampleConverter = includeSamples ? new DocumentToSamplesConverter(compressDefaultGenotype, samplesIds): null; //TODO: Add default genotype
 
-        sourceEntryConverter = new DBObjectToVariantSourceEntryConverter(
+        sourceEntryConverter = new DocumentToVariantSourceEntryConverter(
                 includeSrc,
                 sampleConverter
         );
@@ -557,8 +568,8 @@ public class VariantMongoDBWriter extends VariantDBWriter {
 
         // Do not create the VariantConverter with the sourceEntryConverter nor the statsconverter.
         // The variantSourceEntry and stats conversion will be done on demand to create a proper mongoDB update query.
-        // variantConverter = new DBObjectToVariantConverter(sourceEntryConverter);
-        variantConverter = new DBObjectToVariantConverter(null, null);
+        // variantConverter = new DocumentToVariantConverter(sourceEntryConverter);
+        variantConverter = new DocumentToVariantConverter(null, null);
     }
 
     @Deprecated private void addConsequenceType(VariantEffect effect) {
@@ -586,13 +597,23 @@ public class VariantMongoDBWriter extends VariantDBWriter {
     private void executeBulk() {
         logger.debug("Execute bulk. BulkSize : " + currentBulkSize);
         long startBulk = System.nanoTime();
-        bulk.execute();
-        resetBulk();
-        this.bulkTime += System.nanoTime() - startBulk;
+        try {
+            this.variantsCollection.bulkWrite(documentsToBulkWrite);
+        }
+        catch (MongoWriteException ex) {
+            StringWriter sw = new StringWriter();
+            ex.printStackTrace(new PrintWriter(sw));
+            String stackTrace = sw.toString();
+            logger.error(stackTrace);
+        }
+        finally {
+            resetBulk();
+            this.bulkTime += System.nanoTime() - startBulk;
+        }
     }
 
     private void resetBulk() {
-        bulk = variantsCollection.initializeUnorderedBulkOperation();
+        this.documentsToBulkWrite.clear();
         currentBulkSize = 0;
     }
 

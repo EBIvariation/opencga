@@ -7,6 +7,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+
+import com.mongodb.client.FindIterable;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import org.bson.Document;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -22,7 +27,6 @@ import org.opencb.commons.containers.list.SortedList;
 import org.opencb.commons.run.Task;
 import org.opencb.datastore.mongodb.MongoDataStore;
 import org.opencb.datastore.mongodb.MongoDataStoreManager;
-import org.opencb.opencga.storage.core.variant.io.json.VariantJsonWriter;
 import org.opencb.opencga.storage.mongodb.utils.MongoCredentials;
 
 import static junit.framework.Assert.assertEquals;
@@ -94,14 +98,14 @@ public class VariantMongoDBWriterTest {
         // test
         MongoDataStoreManager mongoDataStoreManager = new MongoDataStoreManager(credentials.getDataStoreServerAddresses());
         MongoDataStore mongoDataStore = mongoDataStoreManager.get(credentials.getMongoDbName(), credentials.getMongoDBConfiguration());
-        DB db = mongoDataStore.getDb();
-        DBCollection collection = db.getCollection("variants");
+        MongoDatabase db = mongoDataStore.getDb();
+        MongoCollection<Document> collection = db.getCollection("variants");
 
         // no ids present on id=.
-        BasicDBObject find = new BasicDBObject(DBObjectToVariantConverter.START_FIELD, 9009406);
-        DBCursor dbObjects = collection.find(find);
-        assertEquals(1, dbObjects.count()); // there's only one matching document
-        assertFalse(dbObjects.next().containsField(DBObjectToVariantConverter.IDS_FIELD));
+        BasicDBObject find = new BasicDBObject(DocumentToVariantConverter.START_FIELD, 9009406);
+        FindIterable<Document> dbObjects = collection.find(find);
+        assertEquals(1, dbObjects.spliterator().getExactSizeIfKnown()); // there's only one matching document
+        assertFalse(dbObjects.iterator().next().containsKey(DocumentToVariantConverter.IDS_FIELD));
 
     }
 
@@ -137,31 +141,31 @@ public class VariantMongoDBWriterTest {
         // test
         MongoDataStoreManager mongoDataStoreManager = new MongoDataStoreManager(credentials.getDataStoreServerAddresses());
         MongoDataStore mongoDataStore = mongoDataStoreManager.get(credentials.getMongoDbName(), credentials.getMongoDBConfiguration());
-        DB db = mongoDataStore.getDb();
-        DBCollection collection = db.getCollection(variantsCollection);
+        MongoDatabase db = mongoDataStore.getDb();
+        MongoCollection<Document> collection = db.getCollection(variantsCollection);
 
         BasicDBObject find = new BasicDBObject("_id", "1_664010_A_C")   // appears on firstAggregatedInputFile
                 .append("files", new BasicDBObject("$size", 1))
                 .append("st", new BasicDBObject("$size", 1));
-        assertEquals(1, collection.find(find).count()); // there's only one matching document with 1 element in files and stats
+        assertEquals(1, collection.countDocuments(find)); // there's only one matching document with 1 element in files and stats
 
 
         find = new BasicDBObject("_id", "1_664010_A_T") // appears on secondAggregatedInputFile
                 .append("files", new BasicDBObject("$size", 1))
                 .append("st", new BasicDBObject("$size", 1));
-        assertEquals(1, collection.find(find).count());
+        assertEquals(1, collection.countDocuments(find));
 
 
         find = new BasicDBObject("_id", "1_701835_T_C") // appears on both files with different values
                 .append("files", new BasicDBObject("$size", 2))
                 .append("st", new BasicDBObject("$size", 2));
-        assertEquals(1, collection.find(find).count());
+        assertEquals(1, collection.find(find).spliterator().getExactSizeIfKnown());
 
         // appears on both files with identical values. this represents an updated file, not different files.
         // if different files were to be written, different variant sources should be used
         find = new BasicDBObject("_id", "1_762409_G_C")
                 .append("files", new BasicDBObject("$size", 1))
                 .append("st", new BasicDBObject("$size", 1));
-        assertEquals(1, collection.find(find).count());
+        assertEquals(1, collection.countDocuments(find));
     }
 }

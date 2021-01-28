@@ -6,7 +6,7 @@
 
     <groupId>uk.ac.ebi.eva</groupId>
     <artifactId>opencga</artifactId>
-    <version>0.5.6</version>
+    <version>0.5.6-mongo4</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -177,9 +177,9 @@
                 <version>${datastore.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.opencb.datastore</groupId>
+                <groupId>uk.ac.ebi.eva</groupId>
                 <artifactId>datastore-mongodb</artifactId>
-                <version>${datastore.version}</version>
+                <version>${datastore.version}-mongo4</version>
             </dependency>
 
             <!-- General dependencies -->

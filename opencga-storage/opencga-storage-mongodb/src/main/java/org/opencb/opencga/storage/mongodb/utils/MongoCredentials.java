@@ -19,6 +19,7 @@ public class MongoCredentials implements OpenCGACredentials {
     private final String mongoDbName;
     @Deprecated private MongoCredential mongoCredentials;
     private String authenticationDatabase;
+    private String authenticationMechanism;
 
 
     public MongoCredentials(String mongoHost, int mongoPort, String mongoDbName, String mongoUser, String mongoPassword)
@@ -90,6 +91,9 @@ public class MongoCredentials implements OpenCGACredentials {
         if (authenticationDatabase != null && !authenticationDatabase.isEmpty()) {
             builder.add("authenticationDatabase", authenticationDatabase);
         }
+        if (authenticationMechanism != null && !authenticationMechanism.isEmpty()) {
+            builder.add("authenticationMechanism", authenticationMechanism);
+        }
         return builder.build();
     }
 
@@ -105,8 +109,16 @@ public class MongoCredentials implements OpenCGACredentials {
         return authenticationDatabase;
     }
 
+    public String getAuthenticationMechanism() {
+        return authenticationMechanism;
+    }
+
     public void setAuthenticationDatabase(String authenticationDatabase) {
         this.authenticationDatabase = authenticationDatabase;
+    }
+
+    public void setAuthenticationMechanism(String authenticationMechanism) {
+        this.authenticationMechanism = authenticationMechanism;
     }
 
     public static List<DataStoreServerAddress> parseDataStoreServerAddresses(String hosts) {
