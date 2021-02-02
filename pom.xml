@@ -6,7 +6,7 @@
 
     <groupId>uk.ac.ebi.eva</groupId>
     <artifactId>opencga</artifactId>
-    <version>0.5.6-mongo4</version>
+    <version>0.5.7-mongo4</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -21,7 +21,7 @@
 
     <properties>
         <java.version>1.8</java.version>
-        <biodata.version>0.4.8</biodata.version>
+        <biodata.version>0.4.9</biodata.version>
         <datastore.version>0.3.3</datastore.version>
         <cellbase.version>3.1.0</cellbase.version>
     </properties>
