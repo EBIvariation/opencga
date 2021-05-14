@@ -22,7 +22,7 @@
     <properties>
         <java.version>1.8</java.version>
         <biodata.version>0.4.9</biodata.version>
-        <datastore.version>0.3.4</datastore.version>
+        <datastore.version>0.3.4-mongo4</datastore.version>
         <cellbase.version>3.1.0</cellbase.version>
     </properties>
 
@@ -172,12 +172,12 @@
             <dependency>
                 <groupId>uk.ac.ebi.eva</groupId>
                 <artifactId>datastore-core</artifactId>
-                <version>${datastore.version}-mongo4</version>
+                <version>${datastore.version}</version>
             </dependency>
             <dependency>
                 <groupId>uk.ac.ebi.eva</groupId>
                 <artifactId>datastore-mongodb</artifactId>
-                <version>${datastore.version}-mongo4</version>
+                <version>${datastore.version}</version>
             </dependency>
 
             <!-- General dependencies -->
