@@ -6,7 +6,7 @@
 
     <groupId>uk.ac.ebi.eva</groupId>
     <artifactId>opencga</artifactId>
-    <version>0.5.7-mongo4</version>
+    <version>0.5.8-mongo4</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -22,7 +22,7 @@
     <properties>
         <java.version>1.8</java.version>
         <biodata.version>0.4.9</biodata.version>
-        <datastore.version>0.3.3</datastore.version>
+        <datastore.version>0.3.4-mongo4</datastore.version>
         <cellbase.version>3.1.0</cellbase.version>
     </properties>
 
@@ -81,18 +81,16 @@
 
     <repositories>
         <repository>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-          <id>eva-releases</id>
-          <url>https://oss.jfrog.org/artifactory/libs-release</url>
-        </repository>
-        <repository>
-          <snapshots>
-            <enabled>true</enabled>
-          </snapshots>
-          <id>eva-snapshots</id>
-          <url>https://oss.jfrog.org/artifactory/libs-snapshot</url>
+            <id>cloudsmith</id>
+            <url>https://dl.cloudsmith.io/public/ebivariation/packages/maven/</url>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </snapshots>
         </repository>
     </repositories>
 
@@ -172,14 +170,14 @@
                 </exclusions>
             </dependency>
             <dependency>
-                <groupId>org.opencb.datastore</groupId>
+                <groupId>uk.ac.ebi.eva</groupId>
                 <artifactId>datastore-core</artifactId>
                 <version>${datastore.version}</version>
             </dependency>
             <dependency>
                 <groupId>uk.ac.ebi.eva</groupId>
                 <artifactId>datastore-mongodb</artifactId>
-                <version>${datastore.version}-mongo4</version>
+                <version>${datastore.version}</version>
             </dependency>
 
             <!-- General dependencies -->
@@ -386,15 +384,15 @@
             </build>
         </profile>
     </profiles>
-    
+
     <distributionManagement>
         <snapshotRepository>
-            <id>eva-snapshots</id>
-            <url>https://oss.jfrog.org/artifactory/oss-snapshot-local</url>
+            <id>cloudsmith</id>
+            <url>https://maven.cloudsmith.io/ebivariation/packages/</url>
         </snapshotRepository>
         <repository>
-            <id>eva-releases</id>
-            <url>https://oss.jfrog.org/artifactory/oss-release-local</url>
+            <id>cloudsmith</id>
+            <url>https://maven.cloudsmith.io/ebivariation/packages/</url>
         </repository>
     </distributionManagement>
 </project>
