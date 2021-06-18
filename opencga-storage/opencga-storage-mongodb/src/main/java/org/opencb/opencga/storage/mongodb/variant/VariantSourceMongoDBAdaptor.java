@@ -251,7 +251,10 @@ public class VariantSourceMongoDBAdaptor implements VariantSourceDBAdaptor {
                 .append(DocumentToVariantSourceConverter.STUDYID_FIELD, variantSourceStats.getStudyId());
         Document update = new Document("$set", new Document(DocumentToVariantSourceConverter.STATS_FIELD, globalStats));
 
-        return coll.update(find, update, null);
+        //Since statistics calculation is at a sid/fid level i.e., study/analysis level
+        //update multiple documents in the files collection with different fnames
+        // (usually happens if there are multiple files per analysis) if they share the same sid/fid
+        return coll.update(find, update, new QueryOptions("multi", true));
     }
 
 
