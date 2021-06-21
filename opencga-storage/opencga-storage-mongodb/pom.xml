@@ -6,7 +6,7 @@
     <parent>
         <groupId>uk.ac.ebi.eva</groupId>
         <artifactId>opencga-storage</artifactId>
-        <version>0.5.8-mongo4</version>
+        <version>0.5.9-mongo4</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
